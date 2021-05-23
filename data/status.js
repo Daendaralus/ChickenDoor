@@ -38,18 +38,40 @@ var callback = function(){
   //let labelWrapperReceier = new LabelWrapperReceiver(receiverLabel);
   
   formattedDuration.SetTotalSeconds(1000);
-
-
+  fomDurationOpenTime = new FormattedDuration(config = {
+    hoursUnitString: "h",
+    minutesUnitString: "m",
+    secondsUnitString: "s",
+});
+fomDurationCloseTime = new FormattedDuration(config = {
+  hoursUnitString: "h",
+  minutesUnitString: "m",
+  secondsUnitString: "s",
+});
+fomDurationOpenOff = new FormattedDuration(config = {
+  hoursUnitString: "h",
+  minutesUnitString: "m",
+  secondsUnitString: "s",
+});
+fomDurationCloseOff = new FormattedDuration(config = {
+  hoursUnitString: "h",
+  minutesUnitString: "m",
+  secondsUnitString: "s",
+});
   //durationPickerMaker.AddSecondChangeObserver(labelWrapperReceier);
   //data.endstophigh
   fetch(window.location.origin+"/get/status").then(response =>{setInterval(watchtick, 1000); response.json()}).then(data => {
-    // formattedDuration.SetTotalSeconds(data.curtime);
-    document.getElementById("#endstophigh")[0].text=data.endstophigh?"On":"Off";
-    document.getElementById("#endstoplow")[0].text=data.endstoplow?"On":"Off";
-    document.getElementById("#doorpos")[0].text=data.doorpos;
-    document.getElementById("#sunpos")[0].text=data.sunpos;
+    formattedDuration.SetTotalSeconds(data.curtime);
+    document.getElementById("#endstophigh").text=data.endstophigh?"On":"Off";
+    document.getElementById("#endstoplow").text=data.endstoplow?"On":"Off";
+    document.getElementById("#doorpos").text=data.doorpos;
+    document.getElementById("#sunpos").text=data.sunpos;
     document.getElementById('.status-box').append(data.doorlog);
-
+fomDurationOpenTime.SetTotalSeconds(data.opentime);
+fomDurationCloseTime.SetTotalSeconds(data.closetime);
+fomDurationOpenOff.SetTotalSeconds(data.openoffset);
+fomDurationCloseOff.SetTotalSeconds(data.closeoffset);
+document.getElementById("#motorspeed").text=data.motorspeed;
     // $('.temp-value').empty().append(`${data.curtime}C`);
     // $('.humid-value').empty().append(`${data.hval}%`);
     // $('.light-value').empty().append(data.light?"ON":"OFF");
@@ -96,35 +118,19 @@ var callback = function(){
   durationPickerMaker2 = new DurationPickerMaker(fomDurationSetTime);
   durationPickerMaker2.SetPickerElement(pickerElementSetTime, window, document);
 
-  fomDurationOpenTime = new FormattedDuration(config = {
-    hoursUnitString: "h",
-    minutesUnitString: "m",
-    secondsUnitString: "s",
-});
+
   durationPickerMakerOpenTime = new DurationPickerMaker(fomDurationOpenTime);
   durationPickerMakerOpenTime.SetPickerElement(pickerElementOpenTime, window, document);
 
-  fomDurationCloseTime = new FormattedDuration(config = {
-    hoursUnitString: "h",
-    minutesUnitString: "m",
-    secondsUnitString: "s",
-});
+
   durationPickerMakerCloseTime = new DurationPickerMaker(fomDurationCloseTime);
   durationPickerMakerCloseTime.SetPickerElement(pickerElementCloseTime, window, document);
 
-  fomDurationOpenOff = new FormattedDuration(config = {
-    hoursUnitString: "h",
-    minutesUnitString: "m",
-    secondsUnitString: "s",
-});
+
   durationPickerMakerOpenOff = new DurationPickerMaker(fomDurationOpenOff);
   durationPickerMakerOpenOff.SetPickerElement(pickerElementOpenOffset, window, document);
 
-  fomDurationCloseOff = new FormattedDuration(config = {
-    hoursUnitString: "h",
-    minutesUnitString: "m",
-    secondsUnitString: "s",
-});
+
   durationPickerMakerCloseOff = new DurationPickerMaker(fomDurationCloseOff);
   durationPickerMakerCloseOff.SetPickerElement(pickerElementCloseOffset, window, document);
 };
@@ -206,6 +212,22 @@ function sendToDevice()
 function setMotorSpeed(){
   let val = parseInt(document.getElementById("#motorspeed").text);
   val = Math.max(Math.min(val, 10000),1000)
+  document.getElementById("#motorspeed").text = val;
+  var data = {setMotorSpeed: val};
+  fetch(window.location.origin+"/set/config", {
+    method: 'PUT', // or 'PUT'
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log('Success:', data);
+  })
+  .catch((error) => {
+    console.error('Error:', error);
+  })
 }
 
 function watchtick(){
@@ -217,6 +239,21 @@ function setTimeDate()
 {
   var time = fomDurationSetTime.ToTotalSeconds();
   var currentDate = document.getElementById( "#datepicker" ).datepicker( "getDate" );
+  var data = {setTime: time};
+  fetch(window.location.origin+"/set/config", {
+    method: 'PUT', // or 'PUT'
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log('Success:', data);
+  })
+  .catch((error) => {
+    console.error('Error:', error);
+  })
 }
 
 function setDoorTimes()
@@ -224,12 +261,42 @@ function setDoorTimes()
   var open = fomDurationOpenTime.ToTotalSeconds();
   var close = fomDurationCloseTime.ToTotalSeconds();
   var dosunmeme = document.getElementById("#sunpositioncheck").val;
+  var data = {setOpenTime: open, setCloseTime: close};
+  fetch(window.location.origin+"/set/config", {
+    method: 'PUT', // or 'PUT'
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log('Success:', data);
+  })
+  .catch((error) => {
+    console.error('Error:', error);
+  })
 }
 
 function setDoorTimeOffsets()
 {
   var open = fomDurationOpenOffset.ToTotalSeconds();
   var close = fomDurationCloseOffset.ToTotalSeconds();
+  var data = {setOpenOffset: open, setCloseOffset: close};
+  fetch(window.location.origin+"/set/config", {
+    method: 'PUT', // or 'PUT'
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log('Success:', data);
+  })
+  .catch((error) => {
+    console.error('Error:', error);
+  })
 }
 
 function startcure()

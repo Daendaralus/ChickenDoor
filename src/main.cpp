@@ -96,15 +96,20 @@ time_t localtm = 0;
 float leftover;
 tm openTimeOrigin;
 tm closeTimeOrigin;
-time_t todayCloseTime;
-time_t todayOpenTime;
-int openOffset = 0;
-int closeOffset = 0;
-unsigned long lastTimeUpdate;
-
+time_t todayCloseTime 20*60*60;
+time_t todayOpenTime = 5*60*60;
+time_t openOffset = 0;
+time_t closeOffset = 0;
+unsigned long lastTimeUpdate=0;
+unsigned long lastWrite=0;
 void updatelocaltm()
 {
   unsigned long now = millis();
+  if(now-lastWrite>1000*60)
+  {
+    
+  writeFile(serializeState(), "state.cfg");
+  }
   if(now<lastTimeUpdate)
   {
     leftover+= ULONG_MAX-lastTimeUpdate;
@@ -135,7 +140,14 @@ void updateDoorTimes()
 
 time_t getCurrentTimeInSeconds()
 {
-  return localtm;
+  auto v = gmtime(&localtm);
+  time_t seconds = 0;
+  seconds+=v->tm_sec;
+  seconds+=v->tm_min*60;
+  seconds+=v->tm_hour*60*60;
+
+  free(v)
+  return seconds;
 }
 
 
@@ -251,6 +263,7 @@ String readFile(String path) { // send the right file to the client (if it exist
   if (SPIFFS.exists(path)) {                            // If the file exists
     File file = SPIFFS.open(path, "r");                 // Open it
     auto text = file.readString();
+    
     file.close();
     //size_t sent = server.streamFile(file, contentType); // And send it to the client
     //file.close();                                       // Then close the file again
@@ -292,13 +305,43 @@ bool handleFileRead(String path){  // send the right file to the client (if it e
   return false;                                          // If the file doesn't exist, return false
 }
 void OTASetup();
-bool writeFile(String text, String path)
+bool writeFile(String text, String path, bool append=false)
 {
   int bufsize= text.length()*sizeof(char);
   FSInfo info;
   SPIFFS.info(info);
 
   unsigned int freebytes = info.totalBytes-info.usedBytes;
+
+  if(SPIFFS.exists(path))
+  {
+    auto file = SPIFFS.open(path, "r");
+    if(!append)
+    {if(freebytes+file.size()>bufsize)
+    {
+      file.close();
+      SPIFFS.remove(path);
+      file = SPIFFS.open(path, "w");
+      file.write(text.c_str(), bufsize);
+    }}
+    else{
+      if(freebytes>bufsize)
+      {
+        file.close();
+      file = SPIFFS.open(path, "w");
+      file.seek(file.size());
+      file.write(text.c_str(), bufsize);
+      }
+    }
+  }
+  else if(freebytes>bufsize)
+  {
+    auto file = SPIFFS.open(path, 'w');
+
+      file.write(text.c_str(), bufsize);
+  }
+  
+
   return true;
 }
 void handleNotFound(){
@@ -321,22 +364,7 @@ boolean ConnectWifi(bool tar);
 void handleConfigSet()
 {
 	int counter = 0;
-  if(server.hasArg("startcure"))
-  {
-    String seconds =  server.arg("duration");
-    curing_end_time = millis() + (atoi(seconds.c_str())*1000);
-    curing = true;
-    ledson=HIGH;
-    digitalWrite(LEDPIN, ledson);
-    motoren=LOW;
-    digitalWrite(MOTORENPIN, motoren);
-  }
-    if(server.hasArg("toggleled"))
-  {
-        ledson=!ledson;
-    digitalWrite(LEDPIN, ledson);
-
-  }
+  
       if(server.hasArg("demosteps"))
   {
     motoren=LOW;//!motoren;
@@ -357,7 +385,100 @@ void handleConfigSet()
   {
     openDoor();
   }
+  if(server.hasArg("setTime"))
+  {
+    String seconds =  server.arg("setTime");
+    time_t newtime = (atol(seconds.c_str()));
+    localtm = newtime;
+  }
+  if(server.hasArg("setOpenTime"))
+  {
+    String seconds =  server.arg("setOpenTime");
+    time_t newopentime = (atol(seconds.c_str()));
+    todayOpenTime = newopentime;
+  }
+  if(server.hasArg("setCloseTime"))
+  {
+    String seconds =  server.arg("setCloseTime");
+    time_t newclosetime = (atol(seconds.c_str()));
+    todayCloseTime = newclosetime;
+  }
+  
+  if(server.hasArg("setOpenOffset"))
+  {
+    String seconds =  server.arg("setOpenOffset");
+    time_t newopentime = (atol(seconds.c_str()));
+    openOffset = newopentime;
+  }
+  if(server.hasArg("setCloseOffset"))
+  {
+    String seconds =  server.arg("setCloseOffset");
+    time_t newclosetime = (atol(seconds.c_str()));
+    closeOffset = newclosetime;
+  }
+  if(server.hasArg("setMotorSpeed"))
+  {
+    String val = server.arg("setMotorSpeed");
+    int newval = atoi(val.c_str());
+    stepinterval = max(min(newval, 10000), 1000);
+  }
+  writeFile(serializeState(), "state.cfg");
   server.send(200);
+}
+
+String serializeState()
+{
+  String state="";
+  state+=String(localtm)+"\n";
+  state+=String(todayOpenTime)+"\n";
+  state+=String(todayCloseTime)+"\n";
+  state+=String(openOffset)+"\n";
+  state+=String(closeOffset)+"\n";
+  state+=String(stepinterval);
+  return state;
+}
+
+void loadConfig()
+{
+  String state = readFile("state.cfg");
+  if(state.length()>0)
+  {
+    int cnt = 0;
+    int lastidx = 0;
+    lastidx = state.indexOf('\n', lastidx);
+    while(lastidx>=0)
+    {
+      cnt++;
+      lastidx = state.indexOf('\n', lastidx);
+    }
+    if(cnt==5)
+    {
+      
+  int timeend = state.indexOf('\n');
+  int opentimeend = state.indexOf('\n', opentimeend+1);
+  int closetimeend = state.indexOf('\n', opentimeend+1);
+  int openoffsetend = state.indexOf('\n', closetimeend+1);
+  int closeoffsetend= state.indexOf('\n', openoffsetend+1);
+
+    time_t timelocal = atol(state.substring(0, timeend).c_str());
+    time_t opentime = atol(state.substring(timeend, opentimeend).c_str());
+    time_t closetime = atol(state.substring(opentimeend, closetimeend).c_str());
+    time_t openoffset = atol(state.substring(closetimeend, openoffsetend).c_str());
+    time_t closeoffset = atol(state.substring(openoffsetend, closeoffsetend).c_str());
+    time_t interval = atol(state.substring(closeoffsetend).c_str());
+
+    localtm = timelocal;
+    todayOpenTime=opentime;
+    todayCloseTime=closetime;
+    openOffset = openoffset;
+    closeOffset= closeoffset;
+    stepinterval=interval;
+
+
+    }
+  }
+  
+  //int motorspdend = state.indexOf('\n', closeoffsetend+1);
 }
 
 String getEvents()
@@ -374,6 +495,12 @@ void handleStatusGet()
   jsonBuffer["endstoplow"] = lowendstopstatus;
   jsonBuffer["doorpos"] = whatisthedoordoing;
   jsonBuffer["sunpos"] = "Coming SoonTM";
+  jsonBuffer["opentime"] = todayOpenTime;
+  jsonBuffer["closetime"] = todayCloseTime;
+  jsonBuffer["openoffset"] = openOffset;
+  jsonBuffer["closeoffset"] = closeOffset;
+  jsonBuffer["motorspeed"] = stepinterval;
+  
   jsonBuffer["doorlog"] = getEvents(); //TODO move time thing to read buffers part on condition of encountering a \n :)
   serializeJsonPretty(jsonBuffer,JSONmessageBuffer);
   server.send(200, "application/json", JSONmessageBuffer);
@@ -455,6 +582,8 @@ void setup() {
     delay(10);
   }
 
+  loadConfig();
+
   server.begin();
 
 }
@@ -477,6 +606,33 @@ int startupguard()
   return 1;
 }
 
+void determineAction()
+{
+  if(localtm>todayOpenTime&&!highendstopstatus&&localtm<todayCloseTime)
+  {
+    openDoor();
+  }
+  if(localtm>todayCloseTime&&!lowendstopstatus)
+  {
+    closeDoor();
+    // if(!highendstopstatus && !lowendstopstatus)
+    // {
+    //   openDoor();
+    //   while(!highendstopstatus)
+    //   {
+    //     handleMotorMove();
+    //     updateEndstopStatus();
+    //   }
+    // }
+    // if(highendstopstatus)
+    // {
+    //   closeDoor();
+    // }
+
+  }
+  
+}
+unsigned long lastDetAction = 0;
 void loop() {
   ArduinoOTA.handle();
   // if (startupguard()==0)
@@ -484,6 +640,7 @@ void loop() {
   //server.handleClient();
 
   MDNS.update();
+  updatelocaltm();
   // static int last_result_time = 0;
   // if(curing && millis() > curing_end_time)
   // {
@@ -494,6 +651,11 @@ void loop() {
   //   curing = false;
   // }
   updateEndstopStatus();
+  auto now = millis();
+  if(now-lastDetAction>1000*30)
+  {
+  determineAction();
+  }
   if (moveon && !lowendstopstatus && !highendstopstatus)
   {
     handleMotorMove();
