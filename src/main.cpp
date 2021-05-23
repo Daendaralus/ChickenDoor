@@ -1,13 +1,15 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <stdio.h>
-#include <FS.h>
+#include <LittleFS.h>
+#define SPIFFS LittleFS
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #include <ArduinoOTA.h>
 #include <wifipw.h>
 #include <time.h>
+#include <ArduinoJson.h>
 #define RELAY_PIN 16
 
 ESP8266WebServer server(80);
@@ -18,7 +20,7 @@ int LEDPIN=5;
 int ledson = LOW;
 bool curing = false;
 int curing_end_time = 0;
-
+String whatisthedoordoing="nothing";
 
 // Sun position memes
 double lat = 0;
@@ -90,7 +92,7 @@ double sunset(tm t, tm *now)
 }
 
 // TIME STUFF
-time_t localtm;
+time_t localtm = 0;
 float leftover;
 tm openTimeOrigin;
 tm closeTimeOrigin;
@@ -131,25 +133,30 @@ void updateDoorTimes()
   todayOpenTime = sunrise(*local, gmtime(&localtm))+(openOffset*60);
 }
 
+time_t getCurrentTimeInSeconds()
+{
+  return localtm;
+}
 
 
 
 // ENDSTOP
-int ENDSTOPLOWPIN = -1;
-int ENDSTOPHIGHPIN = -1;
+int ENDSTOPLOWPIN = 1;
+int ENDSTOPHIGHPIN = 5;
 int highendstopstatus = 0;
 int lowendstopstatus = 0;
 
 void updateEndstopStatus()
 {
-  highendstopstatus = digitalRead(ENDSTOPHIGHPIN);
-  lowendstopstatus = digitalRead(ENDSTOPLOWPIN);
+  highendstopstatus = !digitalRead(ENDSTOPHIGHPIN);
+  lowendstopstatus = !digitalRead(ENDSTOPLOWPIN);
 }
 
 
 // MOTOR
 int motoren = HIGH;
 int moveright= HIGH;
+int dir = moveright;
 int moveon = LOW;
 int DIRPIN=12;
 int STEPPIN=14;
@@ -158,8 +165,8 @@ int targetrpm = 100;
 int stepspersecond = 100;
 int stepsperrev = 100;
 unsigned long motorLastStep = 0;
-int targetstepinterval = 0;
-
+double targetstepinterval = 0;
+int stepinterval = 4000;
 void updateMotorSteps()
 {
   stepspersecond = targetrpm*stepsperrev;
@@ -168,36 +175,75 @@ void updateMotorSteps()
 
 void doStep()
 {
-  if(!motoren)
-  {
+  //if(!motoren)
+  //{
     digitalWrite(STEPPIN, HIGH);
-    delay(1);
+    delayMicroseconds(stepinterval);
     digitalWrite(STEPPIN, LOW);
-  }
+    delayMicroseconds(stepinterval);
+  //}
   motorLastStep = millis();
 }
 
 void handleMotorMove()
 {
-  unsigned long difference = millis()-motorLastStep;
-  float numberSteps = difference/targetstepinterval;
-  updateMotorSteps();
-  for(int x =0; x<int(floor(numberSteps));++x)
-  {
-    doStep();
-  }
+  // updateMotorSteps();
+  // unsigned long difference = millis()-motorLastStep;
+  // float numberSteps = difference/targetstepinterval;
+  // numberSteps = min(stepspersecond, int(numberSteps));
+  // for(int x =0; x<int(numberSteps);++x)
+  // {
+  //   doStep();
+  // }
+    auto now = millis();
+    while(millis()-now<((stepinterval/1000)*2.5))
+    {
+      //handleMotorMove();
+      doStep();
+      //delay(1);
+    }
+    digitalWrite(STEPPIN, HIGH);
 }
 
-void setMotorDirection(bool left=true)
+bool setMotorDirection(bool left=true)
 {
   digitalWrite(DIRPIN, moveright&left);
+  return moveright&left;
 }
 
-void setMotorRPM(int rpm)
+bool openDoor()
 {
-  targetrpm=rpm;
-  updateMotorSteps();
+  setMotorDirection(true);
+  while(lowendstopstatus)
+  {
+    handleMotorMove();
+    updateEndstopStatus();
+  }
+  handleMotorMove();
+  moveon=true;
+  whatisthedoordoing="Trying to open the door!";
 }
+
+bool closeDoor()
+{
+  setMotorDirection(false);
+  while(highendstopstatus)
+  {
+    handleMotorMove();
+    updateEndstopStatus();
+  }
+  handleMotorMove();
+  moveon=true;
+  whatisthedoordoing="Trying to close the door!";
+
+}
+
+
+// void setMotorRPM(int rpm)
+// {
+//   targetrpm=rpm;
+//   updateMotorSteps();
+// }
 
 String readFile(String path) { // send the right file to the client (if it exists)
   //if (path.endsWith("/")) path += "index.html";         // If a folder is requested, send the index file
@@ -291,16 +337,47 @@ void handleConfigSet()
     digitalWrite(LEDPIN, ledson);
 
   }
-      if(server.hasArg("toggletable"))
+      if(server.hasArg("demosteps"))
   {
-    motoren=!motoren;
+    motoren=LOW;//!motoren;
     digitalWrite(MOTORENPIN, motoren);
-  }
+    //doStep();
+    moveon=!moveon;
 
-  server.send(202);
+    
+    // digitalWrite(DIRPIN, dir);
+    // dir = !dir;
+    //dir = setMotorDirection(!dir);
+  }
+    if(server.hasArg("manualclose"))
+  {
+    closeDoor();
+  }
+      if(server.hasArg("manualopen"))
+  {
+    openDoor();
+  }
+  server.send(200);
 }
 
+String getEvents()
+{
+  return "";
+}
 
+void handleStatusGet()
+{
+  StaticJsonDocument<0x5FF> jsonBuffer; //TODO SOMETHING + STATUS BUFFER SIZE
+  char JSONmessageBuffer[0x1FF];
+  jsonBuffer["curtime"] = getCurrentTimeInSeconds();
+  jsonBuffer["endstophigh"] = highendstopstatus;
+  jsonBuffer["endstoplow"] = lowendstopstatus;
+  jsonBuffer["doorpos"] = whatisthedoordoing;
+  jsonBuffer["sunpos"] = "Coming SoonTM";
+  jsonBuffer["doorlog"] = getEvents(); //TODO move time thing to read buffers part on condition of encountering a \n :)
+  serializeJsonPretty(jsonBuffer,JSONmessageBuffer);
+  server.send(200, "application/json", JSONmessageBuffer);
+}
 
 boolean ConnectWifi()
 {
@@ -309,13 +386,13 @@ boolean ConnectWifi()
   String ss = ssid;
   String pw = password;
   WiFi.mode(WIFI_STA);
-  Serial.println("trying....");
+  // Serial.println("trying....");
   WiFi.begin(ss, pw);
-  Serial.println("");
-  Serial.println("Connecting to WiFi");
+  // Serial.println("");
+  // Serial.println("Connecting to WiFi");
 
   // Wait for connection
-  Serial.print("Connecting");
+  // Serial.print("Connecting");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
@@ -326,14 +403,14 @@ boolean ConnectWifi()
     i++;
   }
   if (state){
-    Serial.println("");
-    Serial.print("Connected to ");
-    Serial.println(ssid);
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
+    // Serial.println("");
+    // Serial.print("Connected to ");
+    // Serial.println(ssid);
+    // Serial.print("IP address: ");
+    // Serial.println(WiFi.localIP());
   } else {
-    Serial.println("");
-    Serial.println("Connection failed.");
+    // Serial.println("");
+    // Serial.println("Connection failed.");
   }
 
   return state;
@@ -342,33 +419,44 @@ boolean ConnectWifi()
 
 void setup() {
   WiFi.hostname(hostname);
+  //pinMode(DIRPIN, FUNCTION_3); 
   pinMode(DIRPIN, OUTPUT);
   digitalWrite(DIRPIN, moveright);
   pinMode(MOTORENPIN, OUTPUT);
   digitalWrite(MOTORENPIN, motoren);
   pinMode(STEPPIN, OUTPUT);
   digitalWrite(STEPPIN, LOW);
-    pinMode(LEDPIN, OUTPUT);
-  digitalWrite(LEDPIN, LOW);
+  pinMode(1, FUNCTION_3); 
+  pinMode(ENDSTOPHIGHPIN, INPUT_PULLUP );
+  pinMode(ENDSTOPLOWPIN, INPUT_PULLUP );
   // put your setup code here, to run once:
-	Serial.begin(9600);
-  Serial.println("test!");
+	// Serial.begin(9600);
+  // Serial.println("test!");
 	//ConnectWifi();
   WiFi.softAP(ssid, password);
 // 	//WiFi.forceSleepBegin();
 	auto res = SPIFFS.begin();
   server.on("/set/config", HTTP_PUT, handleConfigSet);
-
+  server.on("/get/status", HTTP_GET, handleStatusGet);
 //   // this will be called for each packet received
   server.onNotFound([]() {                             // If the client requests any URI
     if (!handleFileRead(server.uri()))                  // send it if it exists
       handleNotFound(); // otherwise, respond with a 404 (Not Found) error
   });
   if (MDNS.begin(hostname)) {
-    Serial.println("MDNS responder started"); 
+    // Serial.println("MDNS responder started"); 
   }
   OTASetup();
+
+  auto now = millis();
+  while(millis()-now<5000)
+  {
+    ArduinoOTA.handle();
+    delay(10);
+  }
+
   server.begin();
+
 }
 
 
@@ -391,19 +479,32 @@ int startupguard()
 
 void loop() {
   ArduinoOTA.handle();
-  if (startupguard()==0)
-    return;
-  server.handleClient();
+  // if (startupguard()==0)
+  //   return;
+  //server.handleClient();
 
   MDNS.update();
-  static int last_result_time = 0;
-  if(curing && millis() > curing_end_time)
+  // static int last_result_time = 0;
+  // if(curing && millis() > curing_end_time)
+  // {
+  //   ledson=LOW;
+  //   digitalWrite(LEDPIN, ledson);
+  //   motoren=HIGH;
+  //   digitalWrite(MOTORENPIN, motoren);
+  //   curing = false;
+  // }
+  updateEndstopStatus();
+  if (moveon && !lowendstopstatus && !highendstopstatus)
   {
-    ledson=LOW;
-    digitalWrite(LEDPIN, ledson);
-    motoren=HIGH;
-    digitalWrite(MOTORENPIN, motoren);
-    curing = false;
+    handleMotorMove();
+    bool lowtemp = lowendstopstatus;
+    bool hightemp = highendstopstatus;
+    updateEndstopStatus();
+    if (lowtemp!=lowendstopstatus || hightemp!=highendstopstatus)
+    {
+      moveon=false;
+      whatisthedoordoing="Door arrived at endstop!";
+    }
   }
 
   server.handleClient();
@@ -417,20 +518,20 @@ void OTASetup()
   ArduinoOTA.setPassword(otapw);
   ArduinoOTA.setPort(8266);
   ArduinoOTA.onStart([]() {
-    Serial.println("Start");
+    // Serial.println("Start");
   });
   ArduinoOTA.onEnd([]() {
-    Serial.println("\nEnd");
+    // Serial.println("\nEnd");
   });
   ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error[%u]: ", error);
-    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+    // Serial.printf("Error[%u]: ", error);
+    // if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    // else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    // else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    // else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    // else if (error == OTA_END_ERROR) Serial.println("End Failed");
   });
   ArduinoOTA.begin();
-  Serial.println("OTA ready"); 
+  // Serial.println("OTA ready"); 
 
 }

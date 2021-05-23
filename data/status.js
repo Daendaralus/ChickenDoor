@@ -1,14 +1,24 @@
 
 
 let formattedDuration;
+let fomDurationSetTime;
+let fomDurationOpenTime;
+let fomDurationCloseTime;
+let fomDurationOpenOffset;
+let fomDurationCloseOffset;
 let totaldur = 0;
 let durationPickerMaker;
 let interval;
 let timeout;
-$(document).ready(function() {
-  let pickerElement = document.getElementById("html-duration-picker");
+var callback = function(){
+  let pickerElement = document.getElementById("currenttime");
+  let pickerElementSetTime = document.getElementById("duration-picker");
+  let pickerElementOpenTime = document.getElementById("durpickerOpen");
+  let pickerElementCloseTime = document.getElementById("durpickerClose");
+  let pickerElementOpenOffset = document.getElementById("durpickerOpenOff");
+  let pickerElementCloseOffset = document.getElementById("durpickerCloseOff");
   //let receiverLabel = document.getElementById("output_label");
-  
+  //document.getElementById( "#datepicker" ).datepicker();
   class LabelWrapperReceiver {
         constructor(labelElement) {
           this.labelElement = labelElement;
@@ -20,20 +30,153 @@ $(document).ready(function() {
   
   }
   formattedDuration = new FormattedDuration(config = {
-    hoursUnitString: " h ",
-    minutesUnitString: " m ",
-    secondsUnitString: " s ",
+    hoursUnitString: ":",
+    minutesUnitString: ":",
+    secondsUnitString: "",
 });
 
   //let labelWrapperReceier = new LabelWrapperReceiver(receiverLabel);
   
+  formattedDuration.SetTotalSeconds(1000);
 
-  durationPickerMaker = new DurationPickerMaker(formattedDuration);
-  
+
   //durationPickerMaker.AddSecondChangeObserver(labelWrapperReceier);
+  //data.endstophigh
+  fetch(window.location.origin+"/get/status").then(response =>{setInterval(watchtick, 1000); response.json()}).then(data => {
+    // formattedDuration.SetTotalSeconds(data.curtime);
+    document.getElementById("#endstophigh")[0].text=data.endstophigh?"On":"Off";
+    document.getElementById("#endstoplow")[0].text=data.endstoplow?"On":"Off";
+    document.getElementById("#doorpos")[0].text=data.doorpos;
+    document.getElementById("#sunpos")[0].text=data.sunpos;
+    document.getElementById('.status-box').append(data.doorlog);
+
+    // $('.temp-value').empty().append(`${data.curtime}C`);
+    // $('.humid-value').empty().append(`${data.hval}%`);
+    // $('.light-value').empty().append(data.light?"ON":"OFF");
+    // $('.fan-value').empty().append(data.fan?"ON":"OFF");
+    // $('.time-value').empty().append(data.time);
+    // $('.status-box').append(data.status);
+    // $('.status-box').scrollTop(99999);
+
+    // setTimeout(updateStatus, 1000); 
+    
+  });
+  // $.ajax({
+  //   method: "GET",
+  //   url: window.location.origin+"/get/status",success: function(data) {
+  //     // formattedDuration.SetTotalSeconds(data.curtime);
+  //     document.getElementById("#endstophigh")[0].text=data.endstophigh?"On":"Off";
+  //     document.getElementById("#endstoplow")[0].text=data.endstoplow?"On":"Off";
+  //     document.getElementById("#doorpos")[0].text=data.doorpos;
+  //     document.getElementById("#sunpos")[0].text=data.sunpos;
+  //     document.getElementById('.status-box').append(data.doorlog);
+
+  //     // $('.temp-value').empty().append(`${data.curtime}C`);
+  //     // $('.humid-value').empty().append(`${data.hval}%`);
+  //     // $('.light-value').empty().append(data.light?"ON":"OFF");
+  //     // $('.fan-value').empty().append(data.fan?"ON":"OFF");
+  //     // $('.time-value').empty().append(data.time);
+  //     // $('.status-box').append(data.status);
+  //     // $('.status-box').scrollTop(99999);
+  //   },
+  //   complete: function(obj, status){
+  //     // setTimeout(updateStatus, 1000); 
+  //     setInterval(watchtick, 1000)
+  //   }
+  // });
+  
+  durationPickerMaker = new DurationPickerMaker(formattedDuration);
   durationPickerMaker.SetPickerElement(pickerElement, window, document);
-  $(".progress").hide()
+  
+  fomDurationSetTime = new FormattedDuration(config = {
+    hoursUnitString: "h",
+    minutesUnitString: "m",
+    secondsUnitString: "s",
 });
+  durationPickerMaker2 = new DurationPickerMaker(fomDurationSetTime);
+  durationPickerMaker2.SetPickerElement(pickerElementSetTime, window, document);
+
+  fomDurationOpenTime = new FormattedDuration(config = {
+    hoursUnitString: "h",
+    minutesUnitString: "m",
+    secondsUnitString: "s",
+});
+  durationPickerMakerOpenTime = new DurationPickerMaker(fomDurationOpenTime);
+  durationPickerMakerOpenTime.SetPickerElement(pickerElementOpenTime, window, document);
+
+  fomDurationCloseTime = new FormattedDuration(config = {
+    hoursUnitString: "h",
+    minutesUnitString: "m",
+    secondsUnitString: "s",
+});
+  durationPickerMakerCloseTime = new DurationPickerMaker(fomDurationCloseTime);
+  durationPickerMakerCloseTime.SetPickerElement(pickerElementCloseTime, window, document);
+
+  fomDurationOpenOff = new FormattedDuration(config = {
+    hoursUnitString: "h",
+    minutesUnitString: "m",
+    secondsUnitString: "s",
+});
+  durationPickerMakerOpenOff = new DurationPickerMaker(fomDurationOpenOff);
+  durationPickerMakerOpenOff.SetPickerElement(pickerElementOpenOffset, window, document);
+
+  fomDurationCloseOff = new FormattedDuration(config = {
+    hoursUnitString: "h",
+    minutesUnitString: "m",
+    secondsUnitString: "s",
+});
+  durationPickerMakerCloseOff = new DurationPickerMaker(fomDurationCloseOff);
+  durationPickerMakerCloseOff.SetPickerElement(pickerElementCloseOffset, window, document);
+};
+
+if (
+  document.readyState === "complete" ||
+  (document.readyState !== "loading" && !document.documentElement.doScroll)
+) {
+callback();
+} else {
+document.addEventListener("DOMContentLoaded", callback);
+}
+
+function manualopen()
+{
+  const data = { manualopen: 'example' };
+
+fetch(window.location.origin+"/set/config", {
+  method: 'PUT', // or 'PUT'
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify(data),
+})
+.then(response => response.json())
+.then(data => {
+  console.log('Success:', data);
+})
+.catch((error) => {
+  console.error('Error:', error);
+});
+}
+
+function manualclose()
+{
+  const data = { manualclose: 'example' };
+
+  fetch(window.location.origin+"/set/config", {
+    method: 'PUT', // or 'PUT'
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log('Success:', data);
+  })
+  .catch((error) => {
+    console.error('Error:', error);
+  });
+}
 
 function sendToDevice()
 {
@@ -60,20 +203,38 @@ function sendToDevice()
   });
 }
 
-function cleanup(){
-  clearInterval(interval);
-  $(".progress").hide()
-  $(".cure-button").prop('disabled', false);
+function setMotorSpeed(){
+  let val = parseInt(document.getElementById("#motorspeed").text);
+  val = Math.max(Math.min(val, 10000),1000)
 }
 
 function watchtick(){
-  durationPickerMaker.DecrementSeconds()
-  $("#file").val(formattedDuration.ToTotalSeconds());
+  durationPickerMaker.IncrementSeconds()
+  //$("#file").val(formattedDuration.ToTotalSeconds());
+}
+
+function setTimeDate()
+{
+  var time = fomDurationSetTime.ToTotalSeconds();
+  var currentDate = document.getElementById( "#datepicker" ).datepicker( "getDate" );
+}
+
+function setDoorTimes()
+{
+  var open = fomDurationOpenTime.ToTotalSeconds();
+  var close = fomDurationCloseTime.ToTotalSeconds();
+  var dosunmeme = document.getElementById("#sunpositioncheck").val;
+}
+
+function setDoorTimeOffsets()
+{
+  var open = fomDurationOpenOffset.ToTotalSeconds();
+  var close = fomDurationCloseOffset.ToTotalSeconds();
 }
 
 function startcure()
 {
-  var opt = $( "#animListId option:selected" ).text();
+  var opt = document.getElementById( "#animListId option:selected" ).text();
   var dat = {"startcure":"wow!"};
   var dur = formattedDuration.ToTotalSeconds();
   dat["duration"] = dur;
@@ -107,10 +268,10 @@ function toggleon()
 
 
 
-function toggletable()
+function demoStep()
 {
-  var opt = $( "#animListId option:selected" ).text();
-  var dat = {"toggletable":"wow!"};
+  var opt = document.getElementById( "#animListId option:selected" ).text();
+  var dat = {"demosteps":"wow!"};
   $.ajax({
     method: "PUT",
     url: window.location.origin+"/set/config",
