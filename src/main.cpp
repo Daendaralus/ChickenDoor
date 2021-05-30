@@ -91,40 +91,21 @@ double sunset(tm t, tm *now)
   return sr;
 }
 
+
+
+
 // TIME STUFF
 time_t localtm = 0;
 float leftover;
 tm openTimeOrigin;
 tm closeTimeOrigin;
-time_t todayCloseTime 20*60*60;
+time_t todayCloseTime = 20*60*60;
 time_t todayOpenTime = 5*60*60;
 time_t openOffset = 0;
 time_t closeOffset = 0;
 unsigned long lastTimeUpdate=0;
 unsigned long lastWrite=0;
-void updatelocaltm()
-{
-  unsigned long now = millis();
-  if(now-lastWrite>1000*60)
-  {
-    
-  writeFile(serializeState(), "state.cfg");
-  }
-  if(now<lastTimeUpdate)
-  {
-    leftover+= ULONG_MAX-lastTimeUpdate;
-    lastTimeUpdate=0;
-  }
-  unsigned long delta = now-lastTimeUpdate;
-  if(delta+leftover>1000)
-  {
-    double seconds= (delta+leftover)/1000;
-    double secondsFull;
-    double leftover = modf(seconds, &secondsFull);
-    localtm+= secondsFull;
-  }
-  lastTimeUpdate = millis();
-}
+
 
 void setlocaltm(tm time)
 {
@@ -146,7 +127,7 @@ time_t getCurrentTimeInSeconds()
   seconds+=v->tm_min*60;
   seconds+=v->tm_hour*60*60;
 
-  free(v)
+  free(v);
   return seconds;
 }
 
@@ -251,6 +232,19 @@ bool closeDoor()
 }
 
 
+String serializeState()
+{
+  String state="";
+  state+=String(localtm)+"\n";
+  state+=String(todayOpenTime)+"\n";
+  state+=String(todayCloseTime)+"\n";
+  state+=String(openOffset)+"\n";
+  state+=String(closeOffset)+"\n";
+  state+=String(stepinterval);
+  return state;
+}
+
+
 // void setMotorRPM(int rpm)
 // {
 //   targetrpm=rpm;
@@ -336,7 +330,7 @@ bool writeFile(String text, String path, bool append=false)
   }
   else if(freebytes>bufsize)
   {
-    auto file = SPIFFS.open(path, 'w');
+    auto file = SPIFFS.open(path, "w");
 
       file.write(text.c_str(), bufsize);
   }
@@ -344,6 +338,31 @@ bool writeFile(String text, String path, bool append=false)
 
   return true;
 }
+
+void updatelocaltm()
+{
+  unsigned long now = millis();
+  if(now-lastWrite>1000*60)
+  {
+    
+  writeFile(serializeState(), "state.cfg");
+  }
+  if(now<lastTimeUpdate)
+  {
+    leftover+= ULONG_MAX-lastTimeUpdate;
+    lastTimeUpdate=0;
+  }
+  unsigned long delta = now-lastTimeUpdate;
+  if(delta+leftover>1000)
+  {
+    double seconds= (delta+leftover)/1000;
+    double secondsFull;
+    double leftover = modf(seconds, &secondsFull);
+    localtm+= secondsFull;
+  }
+  lastTimeUpdate = millis();
+}
+
 void handleNotFound(){
   String message = "File Not Found\n\n";
   message += "URI: ";
@@ -426,17 +445,6 @@ void handleConfigSet()
   server.send(200);
 }
 
-String serializeState()
-{
-  String state="";
-  state+=String(localtm)+"\n";
-  state+=String(todayOpenTime)+"\n";
-  state+=String(todayCloseTime)+"\n";
-  state+=String(openOffset)+"\n";
-  state+=String(closeOffset)+"\n";
-  state+=String(stepinterval);
-  return state;
-}
 
 void loadConfig()
 {
