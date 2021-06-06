@@ -60,18 +60,21 @@ fomDurationCloseOff = new FormattedDuration(config = {
 });
   //durationPickerMaker.AddSecondChangeObserver(labelWrapperReceier);
   //data.endstophigh
-  fetch(window.location.origin+"/get/status").then(response =>{setInterval(watchtick, 1000); response.json()}).then(data => {
+  fetch(window.location.origin+"/get/status")
+  .then(response =>{setInterval(watchtick, 1000); return response.json()})
+  // .then(response => response.json())
+  .then(data => {
     formattedDuration.SetTotalSeconds(data.curtime);
-    document.getElementById("#endstophigh").text=data.endstophigh?"On":"Off";
-    document.getElementById("#endstoplow").text=data.endstoplow?"On":"Off";
-    document.getElementById("#doorpos").text=data.doorpos;
-    document.getElementById("#sunpos").text=data.sunpos;
-    document.getElementById('.status-box').append(data.doorlog);
+    document.getElementById("endstophigh").text=data.endstophigh?"On":"Off";
+    document.getElementById("endstoplow").text=data.endstoplow?"On":"Off";
+    document.getElementById("doorpos").text=data.doorpos;
+    document.getElementById("sunpos").text=data.sunpos;
+    document.getElementById('status-box').append(data.doorlog);
 fomDurationOpenTime.SetTotalSeconds(data.opentime);
 fomDurationCloseTime.SetTotalSeconds(data.closetime);
 fomDurationOpenOff.SetTotalSeconds(data.openoffset);
 fomDurationCloseOff.SetTotalSeconds(data.closeoffset);
-document.getElementById("#motorspeed").text=data.motorspeed;
+document.getElementById("motorspeed").text=data.motorspeed;
     // $('.temp-value').empty().append(`${data.curtime}C`);
     // $('.humid-value').empty().append(`${data.hval}%`);
     // $('.light-value').empty().append(data.light?"ON":"OFF");
@@ -147,8 +150,9 @@ document.addEventListener("DOMContentLoaded", callback);
 function manualopen()
 {
   const data = { manualopen: 'example' };
-
-fetch(window.location.origin+"/set/config", {
+  
+  var stuff = new URLSearchParams(data);
+  fetch(window.location.origin+"/set/config?"+stuff.toString(), {
   method: 'PUT', // or 'PUT'
   headers: {
     'Content-Type': 'application/json',
@@ -167,8 +171,9 @@ fetch(window.location.origin+"/set/config", {
 function manualclose()
 {
   const data = { manualclose: 'example' };
-
-  fetch(window.location.origin+"/set/config", {
+  
+  var stuff = new URLSearchParams(data);
+  fetch(window.location.origin+"/set/config?"+stuff.toString(), {
     method: 'PUT', // or 'PUT'
     headers: {
       'Content-Type': 'application/json',
@@ -210,11 +215,12 @@ function sendToDevice()
 }
 
 function setMotorSpeed(){
-  let val = parseInt(document.getElementById("#motorspeed").text);
+  let val = parseInt(document.getElementById("motorspeed").text);
   val = Math.max(Math.min(val, 10000),1000)
-  document.getElementById("#motorspeed").text = val;
-  var data = {setMotorSpeed: val};
-  fetch(window.location.origin+"/set/config", {
+  document.getElementById("motorspeed").text = val;
+  var data = {setMotorSpeed: val};  
+  var stuff = new URLSearchParams(data);
+  fetch(window.location.origin+"/set/config?"+stuff.toString(), {
     method: 'PUT', // or 'PUT'
     headers: {
       'Content-Type': 'application/json',
@@ -237,15 +243,16 @@ function watchtick(){
 
 function setTimeDate()
 {
-  var time = fomDurationSetTime.ToTotalSeconds();
-  var currentDate = document.getElementById( "#datepicker" ).datepicker( "getDate" );
-  var data = {setTime: time};
-  fetch(window.location.origin+"/set/config", {
-    method: 'PUT', // or 'PUT'
+  var curtime = fomDurationSetTime.ToTotalSeconds();
+  // var currentDate = document.getElementById( "#datepicker" ).datepicker( "getDate" );
+  var data = {setTime: curtime};
+  var stuff = new URLSearchParams(data);
+  fetch(window.location.origin+"/set/config?"+stuff.toString(), {
+    method: 'POST', // or 'PUT'
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/x-www-form-url-encoded',
     },
-    body: JSON.stringify(data),
+    body: new URLSearchParams(data)//JSON.stringify(data),
   })
   .then(response => response.json())
   .then(data => {
@@ -260,9 +267,10 @@ function setDoorTimes()
 {
   var open = fomDurationOpenTime.ToTotalSeconds();
   var close = fomDurationCloseTime.ToTotalSeconds();
-  var dosunmeme = document.getElementById("#sunpositioncheck").val;
-  var data = {setOpenTime: open, setCloseTime: close};
-  fetch(window.location.origin+"/set/config", {
+  var dosunmeme = document.getElementById("sunpositioncheck").val;
+  var data = {setOpenTime: open, setCloseTime: close};  
+  var stuff = new URLSearchParams(data);
+  fetch(window.location.origin+"/set/config?"+stuff.toString(), {
     method: 'PUT', // or 'PUT'
     headers: {
       'Content-Type': 'application/json',
@@ -282,8 +290,9 @@ function setDoorTimeOffsets()
 {
   var open = fomDurationOpenOffset.ToTotalSeconds();
   var close = fomDurationCloseOffset.ToTotalSeconds();
-  var data = {setOpenOffset: open, setCloseOffset: close};
-  fetch(window.location.origin+"/set/config", {
+  var data = {setOpenOffset: open, setCloseOffset: close};  
+  var stuff = new URLSearchParams(data);
+  fetch(window.location.origin+"/set/config?"+stuff.toString(), {
     method: 'PUT', // or 'PUT'
     headers: {
       'Content-Type': 'application/json',

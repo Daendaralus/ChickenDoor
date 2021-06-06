@@ -1,8 +1,9 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <stdio.h>
-#include <LittleFS.h>
-#define SPIFFS LittleFS
+#include <FS.h>
+// #include <LittleFS.h>
+// #define SPIFFS LittleFS
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
@@ -126,15 +127,13 @@ time_t getCurrentTimeInSeconds()
   seconds+=v->tm_sec;
   seconds+=v->tm_min*60;
   seconds+=v->tm_hour*60*60;
-
-  free(v);
   return seconds;
 }
 
 
 
 // ENDSTOP
-int ENDSTOPLOWPIN = 1;
+int ENDSTOPLOWPIN = 13;//#1;
 int ENDSTOPHIGHPIN = 5;
 int highendstopstatus = 0;
 int lowendstopstatus = 0;
@@ -257,12 +256,14 @@ String readFile(String path) { // send the right file to the client (if it exist
   if (SPIFFS.exists(path)) {                            // If the file exists
     File file = SPIFFS.open(path, "r");                 // Open it
     auto text = file.readString();
-    
+    Serial.println("File:");
+    Serial.println(text);
     file.close();
     //size_t sent = server.streamFile(file, contentType); // And send it to the client
     //file.close();                                       // Then close the file again
     return text;
   }
+  Serial.println("File didn't exist");
   return "";                                         // If the file doesn't exist, return false
 }
 String getContentType(String filename){
@@ -284,7 +285,8 @@ String getContentType(String filename){
 bool handleFileRead(String path){  // send the right file to the client (if it exists)
   //startMessageLine();
   // server.client().setNoDelay(1);
-
+Serial.print("requesting file: ");
+Serial.println(path);
   if(path.endsWith("/")) path += "index.html";           // If a folder is requested, send the index file
   String contentType = getContentType(path);             // Get the MIME type
   if(SPIFFS.exists(path)){  // If the file exists, either as a compressed archive, or normal                                       // Use the compressed version
@@ -306,7 +308,9 @@ bool writeFile(String text, String path, bool append=false)
   SPIFFS.info(info);
 
   unsigned int freebytes = info.totalBytes-info.usedBytes;
-
+  Serial.println("Writing file: ");
+  Serial.println(path);
+  Serial.println(text);
   if(SPIFFS.exists(path))
   {
     auto file = SPIFFS.open(path, "r");
@@ -317,6 +321,7 @@ bool writeFile(String text, String path, bool append=false)
       SPIFFS.remove(path);
       file = SPIFFS.open(path, "w");
       file.write(text.c_str(), bufsize);
+      Serial.println("Overwrite file");
     }}
     else{
       if(freebytes>bufsize)
@@ -325,6 +330,7 @@ bool writeFile(String text, String path, bool append=false)
       file = SPIFFS.open(path, "w");
       file.seek(file.size());
       file.write(text.c_str(), bufsize);
+      Serial.println("Append File");
       }
     }
   }
@@ -333,6 +339,7 @@ bool writeFile(String text, String path, bool append=false)
     auto file = SPIFFS.open(path, "w");
 
       file.write(text.c_str(), bufsize);
+      Serial.println("new file");
   }
   
 
@@ -346,6 +353,7 @@ void updatelocaltm()
   {
     
   writeFile(serializeState(), "state.cfg");
+  lastWrite=millis();
   }
   if(now<lastTimeUpdate)
   {
@@ -359,8 +367,9 @@ void updatelocaltm()
     double secondsFull;
     double leftover = modf(seconds, &secondsFull);
     localtm+= secondsFull;
+    lastTimeUpdate = millis();
   }
-  lastTimeUpdate = millis();
+  
 }
 
 void handleNotFound(){
@@ -404,10 +413,17 @@ void handleConfigSet()
   {
     openDoor();
   }
+  Serial.print("PUT arguments: ");
+  Serial.println(server.args());
+  Serial.println(server.argName(server.args()-1));
+  Serial.println(server.arg(server.args()-1));
   if(server.hasArg("setTime"))
   {
     String seconds =  server.arg("setTime");
     time_t newtime = (atol(seconds.c_str()));
+        Serial.print("setTime: ");
+    Serial.println(server.arg("setTime"));
+    Serial.println(newtime);
     localtm = newtime;
   }
   if(server.hasArg("setOpenTime"))
@@ -441,7 +457,10 @@ void handleConfigSet()
     int newval = atoi(val.c_str());
     stepinterval = max(min(newval, 10000), 1000);
   }
+  Serial.println("Trying to write state");
   writeFile(serializeState(), "state.cfg");
+  Serial.println("Serialized state: "+serializeState());
+  readFile("state.cfg");
   server.send(200);
 }
 
@@ -449,6 +468,8 @@ void handleConfigSet()
 void loadConfig()
 {
   String state = readFile("state.cfg");
+  Serial.println("readFile worked");
+  Serial.println(state.length());
   if(state.length()>0)
   {
     int cnt = 0;
@@ -457,32 +478,27 @@ void loadConfig()
     while(lastidx>=0)
     {
       cnt++;
-      lastidx = state.indexOf('\n', lastidx);
+      lastidx = state.indexOf('\n', lastidx+1);
     }
+    Serial.print("Counted newlines: ");
+    Serial.println(cnt);
     if(cnt==5)
     {
       
   int timeend = state.indexOf('\n');
-  int opentimeend = state.indexOf('\n', opentimeend+1);
+  int opentimeend = state.indexOf('\n', timeend+1);
   int closetimeend = state.indexOf('\n', opentimeend+1);
   int openoffsetend = state.indexOf('\n', closetimeend+1);
   int closeoffsetend= state.indexOf('\n', openoffsetend+1);
 
-    time_t timelocal = atol(state.substring(0, timeend).c_str());
-    time_t opentime = atol(state.substring(timeend, opentimeend).c_str());
-    time_t closetime = atol(state.substring(opentimeend, closetimeend).c_str());
-    time_t openoffset = atol(state.substring(closetimeend, openoffsetend).c_str());
-    time_t closeoffset = atol(state.substring(openoffsetend, closeoffsetend).c_str());
-    time_t interval = atol(state.substring(closeoffsetend).c_str());
-
-    localtm = timelocal;
-    todayOpenTime=opentime;
-    todayCloseTime=closetime;
-    openOffset = openoffset;
-    closeOffset= closeoffset;
-    stepinterval=interval;
-
-
+    localtm = (state.substring(0, timeend)).toInt();
+    Serial.print("Time: ");
+    Serial.println(localtm);
+    todayOpenTime = (state.substring(timeend, opentimeend)).toInt();
+    todayCloseTime = (state.substring(opentimeend, closetimeend)).toInt();
+    openOffset = (state.substring(closetimeend, openoffsetend)).toInt();
+    closeOffset = (state.substring(openoffsetend, closeoffsetend)).toInt();
+    stepinterval = (state.substring(closeoffsetend)).toInt();
     }
   }
   
@@ -496,22 +512,30 @@ String getEvents()
 
 void handleStatusGet()
 {
+  Serial.println("Tryng to get status...");
   StaticJsonDocument<0x5FF> jsonBuffer; //TODO SOMETHING + STATUS BUFFER SIZE
   char JSONmessageBuffer[0x1FF];
+  Serial.println("Buffer created");
   jsonBuffer["curtime"] = getCurrentTimeInSeconds();
+  Serial.println("About to 1");
   jsonBuffer["endstophigh"] = highendstopstatus;
+  Serial.println("About to 2");
   jsonBuffer["endstoplow"] = lowendstopstatus;
   jsonBuffer["doorpos"] = whatisthedoordoing;
   jsonBuffer["sunpos"] = "Coming SoonTM";
   jsonBuffer["opentime"] = todayOpenTime;
   jsonBuffer["closetime"] = todayCloseTime;
   jsonBuffer["openoffset"] = openOffset;
+  Serial.println("About to 3");
   jsonBuffer["closeoffset"] = closeOffset;
   jsonBuffer["motorspeed"] = stepinterval;
   
   jsonBuffer["doorlog"] = getEvents(); //TODO move time thing to read buffers part on condition of encountering a \n :)
+  Serial.println("About to serialize");
   serializeJsonPretty(jsonBuffer,JSONmessageBuffer);
+  Serial.println("Json serialized");
   server.send(200, "application/json", JSONmessageBuffer);
+  Serial.println("Sent status");
 }
 
 boolean ConnectWifi()
@@ -565,13 +589,14 @@ void setup() {
   pinMode(ENDSTOPHIGHPIN, INPUT_PULLUP );
   pinMode(ENDSTOPLOWPIN, INPUT_PULLUP );
   // put your setup code here, to run once:
-	// Serial.begin(9600);
-  // Serial.println("test!");
-	//ConnectWifi();
-  WiFi.softAP(ssid, password);
+	Serial.begin(9600);
+  Serial.println("test!");
+	ConnectWifi();
+  // WiFi.softAP(ssid, password);
 // 	//WiFi.forceSleepBegin();
 	auto res = SPIFFS.begin();
   server.on("/set/config", HTTP_PUT, handleConfigSet);
+    server.on("/set/config", HTTP_POST, handleConfigSet);
   server.on("/get/status", HTTP_GET, handleStatusGet);
 //   // this will be called for each packet received
   server.onNotFound([]() {                             // If the client requests any URI
@@ -590,8 +615,9 @@ void setup() {
     delay(10);
   }
 
+  Serial.println("trying to load config");
   loadConfig();
-
+  Serial.println("Done loading config");
   server.begin();
 
 }
