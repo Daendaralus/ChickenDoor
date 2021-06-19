@@ -133,7 +133,7 @@ time_t getCurrentTimeInSeconds()
 
 
 // ENDSTOP
-int ENDSTOPLOWPIN = 13;//#1;
+int ENDSTOPLOWPIN = 1;
 int ENDSTOPHIGHPIN = 5;
 int highendstopstatus = 0;
 int lowendstopstatus = 0;
@@ -146,7 +146,7 @@ void updateEndstopStatus()
 
 
 // MOTOR
-int motoren = HIGH;
+int motoren = LOW;
 int moveright= HIGH;
 int dir = moveright;
 int moveon = LOW;
@@ -187,6 +187,8 @@ void handleMotorMove()
   // {
   //   doStep();
   // }
+  
+        digitalWrite(MOTORENPIN, motoren);
     auto now = millis();
     while(millis()-now<((stepinterval/1000)*2.5))
     {
@@ -206,7 +208,8 @@ bool setMotorDirection(bool left=true)
 bool openDoor()
 {
   setMotorDirection(true);
-  while(lowendstopstatus)
+  auto now = millis();
+  while(lowendstopstatus && millis()-now<500)
   {
     handleMotorMove();
     updateEndstopStatus();
@@ -219,7 +222,8 @@ bool openDoor()
 bool closeDoor()
 {
   setMotorDirection(false);
-  while(highendstopstatus)
+  auto now = millis();
+  while(highendstopstatus && millis()-now<500)
   {
     handleMotorMove();
     updateEndstopStatus();
@@ -256,14 +260,14 @@ String readFile(String path) { // send the right file to the client (if it exist
   if (SPIFFS.exists(path)) {                            // If the file exists
     File file = SPIFFS.open(path, "r");                 // Open it
     auto text = file.readString();
-    Serial.println("File:");
-    Serial.println(text);
+    //Serial.println("File:");
+    //Serial.println(text);
     file.close();
     //size_t sent = server.streamFile(file, contentType); // And send it to the client
     //file.close();                                       // Then close the file again
     return text;
   }
-  Serial.println("File didn't exist");
+  //Serial.println("File didn't exist");
   return "";                                         // If the file doesn't exist, return false
 }
 String getContentType(String filename){
@@ -285,8 +289,8 @@ String getContentType(String filename){
 bool handleFileRead(String path){  // send the right file to the client (if it exists)
   //startMessageLine();
   // server.client().setNoDelay(1);
-Serial.print("requesting file: ");
-Serial.println(path);
+//Serial.print("requesting file: ");
+//Serial.println(path);
   if(path.endsWith("/")) path += "index.html";           // If a folder is requested, send the index file
   String contentType = getContentType(path);             // Get the MIME type
   if(SPIFFS.exists(path)){  // If the file exists, either as a compressed archive, or normal                                       // Use the compressed version
@@ -294,7 +298,7 @@ Serial.println(path);
     auto s = file.size();
     server.send_P(200, contentType.c_str(), file.readString().c_str(), s);
     //size_t sent = server.streamFile(file, contentType);    // Send it to the client
-    //Serial.print(string_format("wrote %d bytes", sent));
+    ////Serial.print(string_format("wrote %d bytes", sent));
     file.close();                                          // Close the file again
     return true;
   }
@@ -308,9 +312,9 @@ bool writeFile(String text, String path, bool append=false)
   SPIFFS.info(info);
 
   unsigned int freebytes = info.totalBytes-info.usedBytes;
-  Serial.println("Writing file: ");
-  Serial.println(path);
-  Serial.println(text);
+  //Serial.println("Writing file: ");
+  //Serial.println(path);
+  //Serial.println(text);
   if(SPIFFS.exists(path))
   {
     auto file = SPIFFS.open(path, "r");
@@ -321,7 +325,7 @@ bool writeFile(String text, String path, bool append=false)
       SPIFFS.remove(path);
       file = SPIFFS.open(path, "w");
       file.write(text.c_str(), bufsize);
-      Serial.println("Overwrite file");
+      //Serial.println("Overwrite file");
     }}
     else{
       if(freebytes>bufsize)
@@ -330,7 +334,7 @@ bool writeFile(String text, String path, bool append=false)
       file = SPIFFS.open(path, "w");
       file.seek(file.size());
       file.write(text.c_str(), bufsize);
-      Serial.println("Append File");
+      //Serial.println("Append File");
       }
     }
   }
@@ -339,7 +343,7 @@ bool writeFile(String text, String path, bool append=false)
     auto file = SPIFFS.open(path, "w");
 
       file.write(text.c_str(), bufsize);
-      Serial.println("new file");
+      //Serial.println("new file");
   }
   
 
@@ -413,17 +417,17 @@ void handleConfigSet()
   {
     openDoor();
   }
-  Serial.print("PUT arguments: ");
-  Serial.println(server.args());
-  Serial.println(server.argName(server.args()-1));
-  Serial.println(server.arg(server.args()-1));
+  //Serial.print("PUT arguments: ");
+  //Serial.println(server.args());
+  //Serial.println(server.argName(server.args()-1));
+  //Serial.println(server.arg(server.args()-1));
   if(server.hasArg("setTime"))
   {
     String seconds =  server.arg("setTime");
     time_t newtime = (atol(seconds.c_str()));
-        Serial.print("setTime: ");
-    Serial.println(server.arg("setTime"));
-    Serial.println(newtime);
+        //Serial.print("setTime: ");
+    //Serial.println(server.arg("setTime"));
+    //Serial.println(newtime);
     localtm = newtime;
   }
   if(server.hasArg("setOpenTime"))
@@ -457,9 +461,9 @@ void handleConfigSet()
     int newval = atoi(val.c_str());
     stepinterval = max(min(newval, 10000), 1000);
   }
-  Serial.println("Trying to write state");
+  //Serial.println("Trying to write state");
   writeFile(serializeState(), "state.cfg");
-  Serial.println("Serialized state: "+serializeState());
+  //Serial.println("Serialized state: "+serializeState());
   readFile("state.cfg");
   server.send(200);
 }
@@ -468,8 +472,8 @@ void handleConfigSet()
 void loadConfig()
 {
   String state = readFile("state.cfg");
-  Serial.println("readFile worked");
-  Serial.println(state.length());
+  //Serial.println("readFile worked");
+  //Serial.println(state.length());
   if(state.length()>0)
   {
     int cnt = 0;
@@ -480,8 +484,8 @@ void loadConfig()
       cnt++;
       lastidx = state.indexOf('\n', lastidx+1);
     }
-    Serial.print("Counted newlines: ");
-    Serial.println(cnt);
+    //Serial.print("Counted newlines: ");
+    //Serial.println(cnt);
     if(cnt==5)
     {
       
@@ -492,8 +496,8 @@ void loadConfig()
   int closeoffsetend= state.indexOf('\n', openoffsetend+1);
 
     localtm = (state.substring(0, timeend)).toInt();
-    Serial.print("Time: ");
-    Serial.println(localtm);
+    //Serial.print("Time: ");
+    //Serial.println(localtm);
     todayOpenTime = (state.substring(timeend, opentimeend)).toInt();
     todayCloseTime = (state.substring(opentimeend, closetimeend)).toInt();
     openOffset = (state.substring(closetimeend, openoffsetend)).toInt();
@@ -512,30 +516,30 @@ String getEvents()
 
 void handleStatusGet()
 {
-  Serial.println("Tryng to get status...");
+  //Serial.println("Tryng to get status...");
   StaticJsonDocument<0x5FF> jsonBuffer; //TODO SOMETHING + STATUS BUFFER SIZE
   char JSONmessageBuffer[0x1FF];
-  Serial.println("Buffer created");
+  //Serial.println("Buffer created");
   jsonBuffer["curtime"] = getCurrentTimeInSeconds();
-  Serial.println("About to 1");
+  //Serial.println("About to 1");
   jsonBuffer["endstophigh"] = highendstopstatus;
-  Serial.println("About to 2");
+  //Serial.println("About to 2");
   jsonBuffer["endstoplow"] = lowendstopstatus;
   jsonBuffer["doorpos"] = whatisthedoordoing;
   jsonBuffer["sunpos"] = "Coming SoonTM";
   jsonBuffer["opentime"] = todayOpenTime;
   jsonBuffer["closetime"] = todayCloseTime;
   jsonBuffer["openoffset"] = openOffset;
-  Serial.println("About to 3");
+  //Serial.println("About to 3");
   jsonBuffer["closeoffset"] = closeOffset;
   jsonBuffer["motorspeed"] = stepinterval;
   
   jsonBuffer["doorlog"] = getEvents(); //TODO move time thing to read buffers part on condition of encountering a \n :)
-  Serial.println("About to serialize");
+  //Serial.println("About to serialize");
   serializeJsonPretty(jsonBuffer,JSONmessageBuffer);
-  Serial.println("Json serialized");
+  //Serial.println("Json serialized");
   server.send(200, "application/json", JSONmessageBuffer);
-  Serial.println("Sent status");
+  //Serial.println("Sent status");
 }
 
 boolean ConnectWifi()
@@ -545,16 +549,16 @@ boolean ConnectWifi()
   String ss = ssid;
   String pw = password;
   WiFi.mode(WIFI_STA);
-  // Serial.println("trying....");
+  // //Serial.println("trying....");
   WiFi.begin(ss, pw);
-  // Serial.println("");
-  // Serial.println("Connecting to WiFi");
+  // //Serial.println("");
+  // //Serial.println("Connecting to WiFi");
 
   // Wait for connection
-  // Serial.print("Connecting");
+  // //Serial.print("Connecting");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    //Serial.print(".");
     if (i > 20){
       state = false;
       break;
@@ -562,14 +566,14 @@ boolean ConnectWifi()
     i++;
   }
   if (state){
-    // Serial.println("");
-    // Serial.print("Connected to ");
-    // Serial.println(ssid);
-    // Serial.print("IP address: ");
-    // Serial.println(WiFi.localIP());
+    // //Serial.println("");
+    // //Serial.print("Connected to ");
+    // //Serial.println(ssid);
+    // //Serial.print("IP address: ");
+    // //Serial.println(WiFi.localIP());
   } else {
-    // Serial.println("");
-    // Serial.println("Connection failed.");
+    // //Serial.println("");
+    // //Serial.println("Connection failed.");
   }
 
   return state;
@@ -584,15 +588,18 @@ void setup() {
   pinMode(MOTORENPIN, OUTPUT);
   digitalWrite(MOTORENPIN, motoren);
   pinMode(STEPPIN, OUTPUT);
-  digitalWrite(STEPPIN, LOW);
+  digitalWrite(STEPPIN, HIGH);
   pinMode(1, FUNCTION_3); 
   pinMode(ENDSTOPHIGHPIN, INPUT_PULLUP );
   pinMode(ENDSTOPLOWPIN, INPUT_PULLUP );
   // put your setup code here, to run once:
-	Serial.begin(9600);
-  Serial.println("test!");
+	//Serial.begin(9600);
+  //Serial.println("test!");
 	ConnectWifi();
+  
+  // WiFi.setOutputPower(20.5);
   // WiFi.softAP(ssid, password);
+
 // 	//WiFi.forceSleepBegin();
 	auto res = SPIFFS.begin();
   server.on("/set/config", HTTP_PUT, handleConfigSet);
@@ -604,7 +611,7 @@ void setup() {
       handleNotFound(); // otherwise, respond with a 404 (Not Found) error
   });
   if (MDNS.begin(hostname)) {
-    // Serial.println("MDNS responder started"); 
+    // //Serial.println("MDNS responder started"); 
   }
   OTASetup();
 
@@ -615,9 +622,9 @@ void setup() {
     delay(10);
   }
 
-  Serial.println("trying to load config");
+  //Serial.println("trying to load config");
   loadConfig();
-  Serial.println("Done loading config");
+  //Serial.println("Done loading config");
   server.begin();
 
 }
@@ -672,7 +679,6 @@ void loop() {
   // if (startupguard()==0)
   //   return;
   //server.handleClient();
-
   MDNS.update();
   updatelocaltm();
   // static int last_result_time = 0;
@@ -684,11 +690,13 @@ void loop() {
   //   digitalWrite(MOTORENPIN, motoren);
   //   curing = false;
   // }
+  //delay(10);
   updateEndstopStatus();
   auto now = millis();
   if(now-lastDetAction>1000*30)
   {
-  determineAction();
+  //determineAction();
+  lastDetAction=millis();
   }
   if (moveon && !lowendstopstatus && !highendstopstatus)
   {
@@ -700,6 +708,11 @@ void loop() {
     {
       moveon=false;
       whatisthedoordoing="Door arrived at endstop!";
+      if(lowendstopstatus){
+      // {
+      //   motoren=LOW;
+        digitalWrite(MOTORENPIN, !motoren);
+      }
     }
   }
 
@@ -714,20 +727,20 @@ void OTASetup()
   ArduinoOTA.setPassword(otapw);
   ArduinoOTA.setPort(8266);
   ArduinoOTA.onStart([]() {
-    // Serial.println("Start");
+    // //Serial.println("Start");
   });
   ArduinoOTA.onEnd([]() {
-    // Serial.println("\nEnd");
+    // //Serial.println("\nEnd");
   });
   ArduinoOTA.onError([](ota_error_t error) {
-    // Serial.printf("Error[%u]: ", error);
-    // if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-    // else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-    // else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-    // else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-    // else if (error == OTA_END_ERROR) Serial.println("End Failed");
+    // //Serial.printf("Error[%u]: ", error);
+    // if (error == OTA_AUTH_ERROR) //Serial.println("Auth Failed");
+    // else if (error == OTA_BEGIN_ERROR) //Serial.println("Begin Failed");
+    // else if (error == OTA_CONNECT_ERROR) //Serial.println("Connect Failed");
+    // else if (error == OTA_RECEIVE_ERROR) //Serial.println("Receive Failed");
+    // else if (error == OTA_END_ERROR) //Serial.println("End Failed");
   });
   ArduinoOTA.begin();
-  // Serial.println("OTA ready"); 
+  // //Serial.println("OTA ready"); 
 
 }
