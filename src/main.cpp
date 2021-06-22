@@ -11,11 +11,11 @@
 #include <wifipw.h>
 #include <time.h>
 #include <ArduinoJson.h>
+#include "RTClib.h"
 #define RELAY_PIN 16
 
 ESP8266WebServer server(80);
 
-int LEDPIN=5;
 
 
 int ledson = LOW;
@@ -96,6 +96,7 @@ double sunset(tm t, tm *now)
 
 
 // TIME STUFF
+RTC_Micros rtc;
 time_t localtm = 0;
 float leftover;
 tm openTimeOrigin;
@@ -110,7 +111,9 @@ unsigned long lastWrite=0;
 
 void setlocaltm(tm time)
 {
+  
   localtm = mktime(&time);
+  rtc.adjust(DateTime(localtm));
 }
 
 void updateDoorTimes()
@@ -122,18 +125,17 @@ void updateDoorTimes()
 
 time_t getCurrentTimeInSeconds()
 {
-  auto v = gmtime(&localtm);
-  time_t seconds = 0;
-  seconds+=v->tm_sec;
-  seconds+=v->tm_min*60;
-  seconds+=v->tm_hour*60*60;
+  auto now = rtc.now();
+  time_t seconds = now.second();
+  seconds+=now.minute()*60;
+  seconds+=now.hour()*60*60;
   return seconds;
 }
 
 
 
 // ENDSTOP
-int ENDSTOPLOWPIN = 1;
+int ENDSTOPLOWPIN = 3;
 int ENDSTOPHIGHPIN = 5;
 int highendstopstatus = 0;
 int lowendstopstatus = 0;
@@ -169,9 +171,9 @@ void doStep()
 {
   //if(!motoren)
   //{
-    digitalWrite(STEPPIN, HIGH);
-    delayMicroseconds(stepinterval);
     digitalWrite(STEPPIN, LOW);
+    delayMicroseconds(stepinterval);
+    digitalWrite(STEPPIN, HIGH);
     delayMicroseconds(stepinterval);
   //}
   motorLastStep = millis();
@@ -196,7 +198,7 @@ void handleMotorMove()
       doStep();
       //delay(1);
     }
-    digitalWrite(STEPPIN, HIGH);
+    //digitalWrite(STEPPIN, HIGH);
 }
 
 bool setMotorDirection(bool left=true)
@@ -238,7 +240,7 @@ bool closeDoor()
 String serializeState()
 {
   String state="";
-  state+=String(localtm)+"\n";
+  state+=String(rtc.now().unixtime())+"\n";
   state+=String(todayOpenTime)+"\n";
   state+=String(todayCloseTime)+"\n";
   state+=String(openOffset)+"\n";
@@ -350,31 +352,31 @@ bool writeFile(String text, String path, bool append=false)
   return true;
 }
 
-void updatelocaltm()
-{
-  unsigned long now = millis();
-  if(now-lastWrite>1000*60)
-  {
+// void updatelocaltm()
+// {
+//   unsigned long now = millis();
+//   if(now-lastWrite>1000*60)
+//   {
     
-  writeFile(serializeState(), "state.cfg");
-  lastWrite=millis();
-  }
-  if(now<lastTimeUpdate)
-  {
-    leftover+= ULONG_MAX-lastTimeUpdate;
-    lastTimeUpdate=0;
-  }
-  unsigned long delta = now-lastTimeUpdate;
-  if(delta+leftover>1000)
-  {
-    double seconds= (delta+leftover)/1000;
-    double secondsFull;
-    double leftover = modf(seconds, &secondsFull);
-    localtm+= secondsFull;
-    lastTimeUpdate = millis();
-  }
+//   writeFile(serializeState(), "state.cfg");
+//   lastWrite=millis();
+//   }
+//   if(now<lastTimeUpdate)
+//   {
+//     leftover+= ULONG_MAX-lastTimeUpdate;
+//     lastTimeUpdate=0;
+//   }
+//   unsigned long delta = now-lastTimeUpdate;
+//   if(delta+leftover>1000)
+//   {
+//     double seconds= (delta+leftover)/1000;
+//     double secondsFull;
+//     double leftover = modf(seconds, &secondsFull);
+//     localtm+= secondsFull;
+//     lastTimeUpdate = millis();
+//   }
   
-}
+// }
 
 void handleNotFound(){
   String message = "File Not Found\n\n";
@@ -428,7 +430,11 @@ void handleConfigSet()
         //Serial.print("setTime: ");
     //Serial.println(server.arg("setTime"));
     //Serial.println(newtime);
-    localtm = newtime;
+    // localtm = newtime;
+    auto temptime = TimeSpan(newtime);
+    auto n = rtc.now();
+    
+    rtc.adjust(DateTime(n.year(), n.month(), n.day(), temptime.hours(), temptime.minutes(), temptime.seconds()));
   }
   if(server.hasArg("setOpenTime"))
   {
@@ -458,7 +464,7 @@ void handleConfigSet()
   if(server.hasArg("setMotorSpeed"))
   {
     String val = server.arg("setMotorSpeed");
-    int newval = atoi(val.c_str());
+    int newval = val.toInt();//atoi(val.c_str());
     stepinterval = max(min(newval, 10000), 1000);
   }
   //Serial.println("Trying to write state");
@@ -495,7 +501,8 @@ void loadConfig()
   int openoffsetend = state.indexOf('\n', closetimeend+1);
   int closeoffsetend= state.indexOf('\n', openoffsetend+1);
 
-    localtm = (state.substring(0, timeend)).toInt();
+    time_t seconds_since_epoch = (state.substring(0, timeend)).toInt();
+    rtc.adjust(DateTime(seconds_since_epoch));
     //Serial.print("Time: ");
     //Serial.println(localtm);
     todayOpenTime = (state.substring(timeend, opentimeend)).toInt();
@@ -581,6 +588,7 @@ boolean ConnectWifi()
 
 
 void setup() {
+  rtc.begin(DateTime());
   WiFi.hostname(hostname);
   //pinMode(DIRPIN, FUNCTION_3); 
   pinMode(DIRPIN, OUTPUT);
@@ -595,10 +603,10 @@ void setup() {
   // put your setup code here, to run once:
 	//Serial.begin(9600);
   //Serial.println("test!");
-	ConnectWifi();
+	// ConnectWifi();
   
-  // WiFi.setOutputPower(20.5);
-  // WiFi.softAP(ssid, password);
+  WiFi.setOutputPower(20.5);
+  WiFi.softAP(ssid, password);
 
 // 	//WiFi.forceSleepBegin();
 	auto res = SPIFFS.begin();
@@ -614,7 +622,7 @@ void setup() {
     // //Serial.println("MDNS responder started"); 
   }
   OTASetup();
-
+  
   auto now = millis();
   while(millis()-now<5000)
   {
@@ -623,7 +631,9 @@ void setup() {
   }
 
   //Serial.println("trying to load config");
+  time_t bootdur = (rtc.now()-DateTime()).totalseconds();
   loadConfig();
+  rtc.adjust(DateTime(rtc.now().unixtime()+bootdur));
   //Serial.println("Done loading config");
   server.begin();
 
@@ -649,11 +659,12 @@ int startupguard()
 
 void determineAction()
 {
-  if(localtm>todayOpenTime&&!highendstopstatus&&localtm<todayCloseTime)
+  time_t tnow = getCurrentTimeInSeconds();
+  if(tnow>todayOpenTime&&!highendstopstatus&&tnow<todayCloseTime)
   {
     openDoor();
   }
-  if(localtm>todayCloseTime&&!lowendstopstatus)
+  if(tnow>todayCloseTime&&!lowendstopstatus)
   {
     closeDoor();
     // if(!highendstopstatus && !lowendstopstatus)
@@ -680,7 +691,7 @@ void loop() {
   //   return;
   //server.handleClient();
   MDNS.update();
-  updatelocaltm();
+  // updatelocaltm();
   // static int last_result_time = 0;
   // if(curing && millis() > curing_end_time)
   // {
@@ -693,9 +704,9 @@ void loop() {
   //delay(10);
   updateEndstopStatus();
   auto now = millis();
-  if(now-lastDetAction>1000*30)
+  if(now-lastDetAction>1000)
   {
-  //determineAction();
+  determineAction();
   lastDetAction=millis();
   }
   if (moveon && !lowendstopstatus && !highendstopstatus)

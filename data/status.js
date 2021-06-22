@@ -64,17 +64,22 @@ fomDurationCloseOff = new FormattedDuration(config = {
   .then(response =>{setInterval(watchtick, 1000); return response.json()})
   // .then(response => response.json())
   .then(data => {
-    formattedDuration.SetTotalSeconds(data.curtime);
+    formattedDuration.SetTotalSeconds(data.curtime-1);
     document.getElementById("endstophigh").text=data.endstophigh?"On":"Off";
     document.getElementById("endstoplow").text=data.endstoplow?"On":"Off";
     document.getElementById("doorpos").text=data.doorpos;
     document.getElementById("sunpos").text=data.sunpos;
     document.getElementById('status-box').append(data.doorlog);
-fomDurationOpenTime.SetTotalSeconds(data.opentime);
-fomDurationCloseTime.SetTotalSeconds(data.closetime);
-fomDurationOpenOff.SetTotalSeconds(data.openoffset);
-fomDurationCloseOff.SetTotalSeconds(data.closeoffset);
-document.getElementById("motorspeed").text=data.motorspeed;
+fomDurationOpenTime.SetTotalSeconds(data.opentime-1);
+fomDurationCloseTime.SetTotalSeconds(data.closetime-1);
+fomDurationOpenOff.SetTotalSeconds(data.openoffset-1);
+fomDurationCloseOff.SetTotalSeconds(data.closeoffset-1);
+durationPickerMakerOpenTime.IncrementSeconds();
+durationPickerMakerCloseTime.IncrementSeconds();
+durationPickerMakerOpenOff.IncrementSeconds();
+durationPickerMakerCloseOff.IncrementSeconds();
+durationPickerMaker.IncrementSeconds();
+document.getElementById("motorspeed").value=data.motorspeed;
     // $('.temp-value').empty().append(`${data.curtime}C`);
     // $('.humid-value').empty().append(`${data.hval}%`);
     // $('.light-value').empty().append(data.light?"ON":"OFF");
@@ -215,9 +220,9 @@ function sendToDevice()
 }
 
 function setMotorSpeed(){
-  let val = parseInt(document.getElementById("motorspeed").text);
+  let val = parseInt(document.getElementById("motorspeed").value);
   val = Math.max(Math.min(val, 10000),1000)
-  document.getElementById("motorspeed").text = val;
+  document.getElementById("motorspeed").value = val;
   var data = {setMotorSpeed: val};  
   var stuff = new URLSearchParams(data);
   fetch(window.location.origin+"/set/config?"+stuff.toString(), {
