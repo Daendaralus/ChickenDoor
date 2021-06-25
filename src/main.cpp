@@ -12,6 +12,7 @@
 #include <time.h>
 #include <ArduinoJson.h>
 #include "RTClib.h"
+#include "AccelStepper.h"
 #define RELAY_PIN 16
 
 ESP8266WebServer server(80);
@@ -148,6 +149,7 @@ void updateEndstopStatus()
 
 
 // MOTOR
+
 int motoren = LOW;
 int moveright= HIGH;
 int dir = moveright;
@@ -161,6 +163,8 @@ int stepsperrev = 100;
 unsigned long motorLastStep = 0;
 double targetstepinterval = 0;
 int stepinterval = 4000;
+
+AccelStepper stepper(AccelStepper::DRIVER, STEPPIN, DIRPIN, -1,-1,false);
 void updateMotorSteps()
 {
   stepspersecond = targetrpm*stepsperrev;
@@ -191,13 +195,14 @@ void handleMotorMove()
   // }
   
         digitalWrite(MOTORENPIN, motoren);
-    auto now = millis();
-    while(millis()-now<((stepinterval/1000)*2.5))
-    {
-      //handleMotorMove();
-      doStep();
-      //delay(1);
-    }
+    // auto now = millis();
+    // while(millis()-now<((stepinterval/1000)*2.5))
+    // {
+    //   //handleMotorMove();
+    //   doStep();
+    //   //delay(1);
+    // }
+    stepper.runSpeed();
     //digitalWrite(STEPPIN, HIGH);
 }
 
@@ -600,6 +605,9 @@ void setup() {
   pinMode(1, FUNCTION_3); 
   pinMode(ENDSTOPHIGHPIN, INPUT_PULLUP );
   pinMode(ENDSTOPLOWPIN, INPUT_PULLUP );
+
+  stepper.setMaxSpeed(2000);
+  stepper.setSpeed(1000);
   // put your setup code here, to run once:
 	//Serial.begin(9600);
   //Serial.println("test!");
@@ -706,7 +714,7 @@ void loop() {
   auto now = millis();
   if(now-lastDetAction>1000)
   {
-  determineAction();
+  // determineAction();
   lastDetAction=millis();
   }
   if (moveon && !lowendstopstatus && !highendstopstatus)
